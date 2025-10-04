@@ -1,33 +1,81 @@
-const mongoose = require('mongoose');
+// models/user_model.js
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema({
-    nom: {
-        type: String,
-        required: true },
-    prenom: {
-        type: String,
-        required: false },
-    email: {
-        type: String,
-        required: true,
-        unique: true },
-    motDePasse: {
-        type: String,
-        required: true },
-    sexe: {
-        type: String,
-        enum: ['Homme', 'Femme'],
-    },
-    role: {
-        type: String,
-        enum: ['ADMIN_RH', 'SALARIE', 'STAGIAIRE'],
-        default: 'SALARIE' },
-    service: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service' },
-    encadreur: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User' },
-}, { timestamps: true });
+const options = { discriminatorKey: "role", timestamps: true };
 
-module.exports = mongoose.model('User', userSchema);
+// --- Schéma de base User ---
+const baseSchema = new mongoose.Schema({
+  nom: { type: String, required: true, trim: true },
+  prenom: { type: String, required: true, trim: true },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    match: /.+\@.+\..+/
+  },
+  sexe: { type: String, enum: ["Homme", "Femme"], required: true },
+  dateNaissance: { type: Date, required: true },
+  telephone: { type: String, trim: true }, // ✅ Ajout recommandé
+  adresse: { type: String, required: true },
+  password: { type: String, required: true },
+  role: {
+    type: String,
+    enum: ["ADMIN_RH", "SALARIE", "STAGIAIRE"],
+    required: true
+  },
+  actif: { type: Boolean, default: true } // ✅ Ajout important pour soft delete
+}, options);
+
+// --- Middleware : hash du mot de passe ---
+baseSchema.pre("save", async function(next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+// --- Méthode pour comparer les mots de passe ---
+baseSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// --- Modèle principal User ---
+const User = mongoose.model("User", baseSchema);
+
+// --- Schéma pour Salarié ---
+const salarieSchema = new mongoose.Schema({
+  dateEmbauche: { type: Date, required: true },
+  matricule: { 
+    type: String, 
+    unique: true,
+    sparse: true // ✅ Permet les valeurs null pour les autres rôles
+  },
+  situationFamiliale: { 
+    type: String, 
+    enum: ["Célibataire", "Marié(e)", "Divorcé(e)", "Veuf(ve)"], 
+    default: "Célibataire" 
+  },
+  nombreEnfants: { type: Number, default: "" }
+}, options);
+
+// --- Schéma pour Stagiaire ---
+const stagiaireSchema = new mongoose.Schema({
+  ecole: { type: String, required: true },
+  filiere: { type: String, required: true },
+  niveau: { 
+    type: String, 
+    enum: ["Licence 1", "Licence 2", "Licence 3", "Master 1", "Master 2", "Doctorat"],
+    required: true 
+  },
+  dateDebutStage: { type: Date, required: true }, // ✅ Correction: ajout du champ manquant
+  dateFinStage: { type: Date, required: true },   // ✅ Ajout important
+  tuteur: { type: String, trim: true }           // ✅ Ajout recommandé
+}, options);
+
+// --- Discriminators ---
+const Salarie = User.discriminator("SALARIE", salarieSchema);
+const Stagiaire = User.discriminator("STAGIAIRE", stagiaireSchema);
+
+module.exports = { User, Salarie, Stagiaire };

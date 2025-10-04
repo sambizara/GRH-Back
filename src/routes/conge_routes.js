@@ -1,22 +1,26 @@
 const express = require('express');
-const { createConge, getMesConges, getAllConges, updateCongeStatus, deleteConge } = require('../controllers/conge_controller');
+const { 
+    createConge, 
+    getMesConges, 
+    getAllConges, 
+    updateCongeStatus, 
+    deleteConge,
+    getMesSoldes
+} = require('../controllers/conge_controller');
 const auth = require('../middlewares/auth_middleware');
 
 const router = express.Router();
 
-// Routes pour demander un congé (protégées, accessibles par Salarié)
+// Routes SALARIE
 router.post('/', auth(['SALARIE']), createConge);
+router.get('/mes-conges', auth(['SALARIE']), getMesConges);
+router.get('/mes-soldes', auth(['SALARIE']), getMesSoldes);
 
-// Routes pour voir les congés (protégées, accessibles au Salarié)
-router.get('/:id', auth(['SALARIE']), getMesConges);
+// Routes ADMIN_RH - ⭐ CORRECTION: routes séparées pour admin
+router.get('/admin/tous', auth(['ADMIN_RH']), getAllConges);
+router.put('/admin/:id/statut', auth(['ADMIN_RH']), updateCongeStatus); // ⭐ Changé le chemin
 
-// Routes pour voir toutes les demandes de congé (protégées, accessibles uniquement par ADMIN_RH)
-router.get('/', auth(['ADMIN_RH']), getAllConges);
-
-// Routes pour valider/refuser une demande de congé (protégées, accessibles uniquement par ADMIN_RH)
-router.put('/:id', auth(['ADMIN_RH']), updateCongeStatus);
-
-// Routes pour supprimer une demande de congé (protégées, accessibles au Salarié et ADMIN_RH)
+// Route mixte (SALARIE peut supprimer ses congés, ADMIN peut tous supprimer)
 router.delete('/:id', auth(['SALARIE', 'ADMIN_RH']), deleteConge);
 
 module.exports = router;
