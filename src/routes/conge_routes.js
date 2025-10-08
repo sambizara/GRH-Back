@@ -16,7 +16,7 @@ router.post('/', auth(['SALARIE']), createConge);
 router.get('/mes-conges', auth(['SALARIE']), getMesConges);
 router.get('/mes-soldes', auth(['SALARIE']), getMesSoldes);
 
-// Routes ADMIN_RH - ⭐ CORRECTION: routes séparées pour admin
+// Routes ADMIN_RH 
 router.get('/admin/tous', auth(['ADMIN_RH']), getAllConges);
 router.put('/admin/:id/statut', auth(['ADMIN_RH']), updateCongeStatus); // ⭐ Changé le chemin
 

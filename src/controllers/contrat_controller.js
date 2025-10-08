@@ -1,6 +1,6 @@
-// controllers/contrat_controller.js
+// controllers/contrat_controller.js - CORRECTION COMPLÈTE
 const Contrat = require("../models/contrat_model");
-const User = require("../models/user_model");
+const { User } = require("../models/user_model");
 const Service = require("../models/service_model");
 
 // 🔹 Créer un nouveau contrat
@@ -72,8 +72,14 @@ exports.createContrat = async (req, res) => {
       user: user,
       statut: "Actif",
       $or: [
-        { dateDebut: { $lte: dateFin || new Date('2100-01-01') }, dateFin: { $gte: dateDebut } },
-        { dateDebut: { $lte: dateFin || new Date('2100-01-01') }, dateFin: null }
+        { 
+          dateDebut: { $lte: dateFin || new Date('2100-01-01') }, 
+          dateFin: { $gte: dateDebut } 
+        },
+        { 
+          dateDebut: { $lte: dateFin || new Date('2100-01-01') }, 
+          dateFin: null 
+        }
       ]
     });
 
@@ -174,12 +180,11 @@ exports.getContratById = async (req, res) => {
   }
 };
 
-// 🔹 Mettre à jour un contrat - VERSION FINALE QUI FONCTIONNE
+// 🔹 Mettre à jour un contrat
 exports.updateContrat = async (req, res) => {
   try {
     const { dateDebut, dateFin, typeContrat, ...updateData } = req.body;
 
-    // Trouver le contrat existant
     const contrat = await Contrat.findById(req.params.id);
     if (!contrat) {
       return res.status(404).json({
@@ -223,10 +228,8 @@ exports.updateContrat = async (req, res) => {
       }
     });
 
-    // Sauvegarder sans validation pour éviter les problèmes
     await contrat.save({ validateBeforeSave: false });
 
-    // Recharger avec les populations
     const contratMisAJour = await Contrat.findById(req.params.id)
       .populate("user", "nom prenom email role matricule")
       .populate("service", "nomService");

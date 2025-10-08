@@ -113,38 +113,77 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { password, ...updateData } = req.body;
+    const userId = req.params.id;
 
     // Empêcher la modification du rôle et email
     delete updateData.role;
     delete updateData.email;
+
+    // Récupérer l'utilisateur pour connaître son type
+    const existingUser = await User.findById(userId);
+    if (!existingUser) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
 
     // Hasher le mot de passe si fourni
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    const user = await User.findOneAndUpdate(
-      { _id: req.params.id },
-      updateData,
-      { new: true, runValidators: true }
-    ).select("-password");
+    let updatedUser;
 
-    if (!user) {
+    // Utiliser le modèle approprié selon le rôle
+    if (existingUser.role === "SALARIE") {
+      // Pour Salarié, utiliser le modèle Salarie
+      updatedUser = await Salarie.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true, runValidators: true }
+      ).select("-password");
+    } else if (existingUser.role === "STAGIAIRE") {
+      // Pour Stagiaire, utiliser le modèle Stagiaire
+      updatedUser = await Stagiaire.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true, runValidators: true }
+      ).select("-password");
+    } else {
+      // Pour ADMIN_RH, utiliser le modèle User de base
+      updatedUser = await User.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true, runValidators: true }
+      ).select("-password");
+    }
+
+    if (!updatedUser) {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
 
     res.status(200).json({ 
       message: "Utilisateur mis à jour avec succès", 
-      user 
+      user: updatedUser 
     });
   } catch (error) {
     console.error("❌ Erreur mise à jour:", error);
+    
+    // Gestion spécifique des erreurs de duplication
+    if (error.code === 11000) {
+      if (error.keyPattern && error.keyPattern.matricule) {
+        return res.status(400).json({ message: "Ce matricule est déjà utilisé" });
+      }
+      if (error.keyPattern && error.keyPattern.email) {
+        return res.status(400).json({ message: "Cet email est déjà utilisé" });
+      }
+    }
+    
     res.status(500).json({ 
       message: "Erreur serveur", 
       error: error.message 
     });
   }
 };
+
 
 // 🔹 Supprimer un utilisateur (soft delete)
 exports.deleteUser = async (req, res) => {
