@@ -20,7 +20,6 @@ exports.createUser = async (req, res) => {
 
     let newUser;
 
-    // ✅ CORRECTION: Supprimé les références à service et poste qui n'existent pas dans le modèle
     if (role === "SALARIE") {
       const { dateEmbauche, matricule, situationFamiliale, nombreEnfants } = req.body;
       
@@ -28,12 +27,19 @@ exports.createUser = async (req, res) => {
         return res.status(400).json({ message: "dateEmbauche est obligatoire pour un salarié." });
       }
 
-      // ✅ CORRECTION: Génération automatique du matricule si non fourni
-      const finalMatricule = matricule || `SAL${Date.now()}`;
+      if (!matricule) {
+        return res.status(400).json({ message: "Le matricule est obligatoire pour un salarié." });
+      }
+
+      // Vérifier si le matricule existe déjà
+      const existingMatricule = await Salarie.findOne({ matricule });
+      if (existingMatricule) {
+        return res.status(400).json({ message: "Matricule déjà utilisé" });
+      }
       
       newUser = new Salarie({ 
         nom, prenom, email, password, sexe, dateNaissance, telephone, adresse, 
-        dateEmbauche, matricule: finalMatricule, situationFamiliale, nombreEnfants 
+        dateEmbauche, matricule, situationFamiliale, nombreEnfants 
       });
     } 
     else if (role === "STAGIAIRE") {
@@ -59,7 +65,6 @@ exports.createUser = async (req, res) => {
 
     await newUser.save();
     
-    // ✅ CORRECTION: Supprimé le populate qui causait une erreur
     res.status(201).json({ 
       message: "Utilisateur créé avec succès", 
       user: newUser 
@@ -76,7 +81,6 @@ exports.createUser = async (req, res) => {
 // 🔹 Récupérer tous les utilisateurs
 exports.getUsers = async (req, res) => {
   try {
-    // ✅ CORRECTION: Supprimé le populate qui causait une erreur
     const users = await User.find().select("-password");
     res.status(200).json(users);
   } catch (error) {
@@ -91,7 +95,6 @@ exports.getUsers = async (req, res) => {
 // 🔹 Récupérer un utilisateur par ID
 exports.getUserById = async (req, res) => {
   try {
-    // ✅ CORRECTION: Supprimé le populate
     const user = await User.findById(req.params.id).select("-password");
     if (!user) {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
@@ -120,7 +123,6 @@ exports.updateUser = async (req, res) => {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    // ✅ CORRECTION: Utilisation de findOneAndUpdate pour éviter les problèmes de discriminator
     const user = await User.findOneAndUpdate(
       { _id: req.params.id },
       updateData,
@@ -147,7 +149,6 @@ exports.updateUser = async (req, res) => {
 // 🔹 Supprimer un utilisateur (soft delete)
 exports.deleteUser = async (req, res) => {
   try {
-    // ✅ AMÉLIORATION: Soft delete au lieu de suppression physique
     const user = await User.findOneAndUpdate(
       { _id: req.params.id },
       { actif: false },

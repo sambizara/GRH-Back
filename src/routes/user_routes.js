@@ -8,7 +8,7 @@ const {
   deleteUser,
   getCurrentUser,
   updateCurrentUser,
-  activateUser // ✅ Nouvelle route
+  activateUser
 } = require("../controllers/user_controller");
 const auth = require("../middlewares/auth_middleware");
 
@@ -24,6 +24,6 @@ router.get("/", auth(["ADMIN_RH"]), getUsers);
 router.get("/:id", auth(["ADMIN_RH"]), getUserById);
 router.put("/:id", auth(["ADMIN_RH"]), updateUser);
 router.delete("/:id", auth(["ADMIN_RH"]), deleteUser);
-router.patch("/:id/activate", auth(["ADMIN_RH"]), activateUser); // ✅ Nouvelle route
+router.patch("/:id/activate", auth(["ADMIN_RH"]), activateUser);
 
 module.exports = router;
