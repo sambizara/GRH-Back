@@ -70,9 +70,18 @@ const stagiaireSchema = new mongoose.Schema({
     enum: ["Licence 1", "Licence 2", "Licence 3", "Master 1", "Master 2", "Doctorat"],
     required: true 
   },
-  dateDebutStage: { type: Date, required: true },
-  dateFinStage: { type: Date, required: true },
-  tuteur: { type: String, trim: true }
+  dureeStage: {
+    type: Number,
+    required: true,
+    min: 1,
+    comment: "Durée du stage en mois"
+  },
+  poste: {
+    type: String,
+    required: true,
+    trim: true,
+    uppercase: true
+  }
 }, options);
 
 // --- Discriminators ---

@@ -27,6 +27,7 @@ app.use("/api/rapports", require("./src/routes/rapport_routes"));
 app.use("/api/notifications", require("./src/routes/notification_routes"));
 app.use("/api/stages", require("./src/routes/stage_routes"));
 app.use("/api/pdf", require("./src/routes/pdf_routes"));
+app.use("/api/confirmations", require("./src/routes/confirmation_routes"));
 
 // Test route protégée
 const auth = require("./src/middlewares/auth_middleware");

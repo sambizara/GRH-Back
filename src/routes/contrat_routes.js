@@ -24,7 +24,7 @@ router.delete("/:id", auth(["ADMIN_RH"]), deleteContrat);
 // ✅ Routes accessibles par tous les utilisateurs authentifiés
 router.get("/:id", auth(["ADMIN_RH", "SALARIE"]), getContratById);
 
-// ✅ Route pour l'utilisateur connecté - CORRECTION DU CHEMIN
-router.get("/mes-contrats/moi", auth(["SALARIE"]), getMesContrats);
+// ✅ Route pour l'utilisateur connecté
+router.get("/mes/contrats", auth(["SALARIE"]), getMesContrats);
 
 module.exports = router;

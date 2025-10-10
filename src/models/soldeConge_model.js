@@ -24,16 +24,37 @@ const soldeCongeSchema = new mongoose.Schema({
         default: 14 
     },
     congesPris: [{
-        typeConge: String,
-        dateDebut: Date,
-        dateFin: Date,
-        joursPris: Number,
+        typeConge: {
+            type: String,
+            enum: ['Annuel', 'Maladie', 'Sans Solde', 'Maternité', 'Paternité'],
+            required: true
+        },
+        dateDebut: {
+            type: Date,
+            required: true
+        },
+        dateFin: {
+            type: Date,
+            required: true
+        },
+        joursPris: {
+            type: Number,
+            required: true,
+            min: 1
+        },
         congeId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Conge'
+            ref: 'Conge',
+            required: true
+        },
+        datePrise: {
+            type: Date,
+            default: Date.now
         }
     }]
-}, { timestamps: true });
+}, { 
+    timestamps: true 
+});
 
 // Méthode pour calculer le solde restant
 soldeCongeSchema.methods.getSoldeRestant = function(typeConge) {
@@ -51,22 +72,66 @@ soldeCongeSchema.methods.getSoldeRestant = function(typeConge) {
         .filter(c => c.typeConge === typeConge)
         .reduce((total, conge) => total + conge.joursPris, 0);
 
-    return Math.max(0, soldeInitial - joursPris);
+    const soldeRestant = Math.max(0, soldeInitial - joursPris);
+    
+    console.log(`📊 Solde ${typeConge}: ${soldeInitial} - ${joursPris} = ${soldeRestant} jours restants`);
+    
+    return soldeRestant;
 };
 
 // Méthode pour ajouter un congé pris
 soldeCongeSchema.methods.ajouterCongePris = function(conge) {
     const joursPris = Math.ceil((new Date(conge.dateFin) - new Date(conge.dateDebut)) / (1000 * 60 * 60 * 24)) + 1;
     
-    this.congesPris.push({
-        typeConge: conge.typeConge,
-        dateDebut: conge.dateDebut,
-        dateFin: conge.dateFin,
-        joursPris: joursPris,
-        congeId: conge._id
-    });
+    // Vérifier si le congé n'existe pas déjà
+    const existeDeja = this.congesPris.some(c => c.congeId.toString() === conge._id.toString());
+    
+    if (!existeDeja) {
+        this.congesPris.push({
+            typeConge: conge.typeConge,
+            dateDebut: conge.dateDebut,
+            dateFin: conge.dateFin,
+            joursPris: joursPris,
+            congeId: conge._id
+        });
 
-    return this.save();
+        console.log(`➕ Congé ajouté: ${joursPris} jours de ${conge.typeConge}`);
+        return this.save();
+    } else {
+        console.log(`ℹ️ Congé déjà présent dans les soldes`);
+        return Promise.resolve(this);
+    }
+};
+
+// Méthode pour retirer un congé pris (remboursement)
+soldeCongeSchema.methods.retirerCongePris = function(congeId) {
+    const congeIndex = this.congesPris.findIndex(c => c.congeId.toString() === congeId.toString());
+    
+    if (congeIndex !== -1) {
+        const congeRetire = this.congesPris[congeIndex];
+        this.congesPris.splice(congeIndex, 1);
+        
+        console.log(`➖ Congé retiré: ${congeRetire.joursPris} jours de ${congeRetire.typeConge}`);
+        return this.save();
+    }
+    
+    return Promise.resolve(this);
+};
+
+// Méthode statique pour initialiser un solde
+soldeCongeSchema.statics.initialiserSolde = function(userId) {
+    return this.findOneAndUpdate(
+        { user: userId },
+        { 
+            user: userId,
+            soldeAnnuel: 30,
+            soldeMaladie: 15,
+            soldeMaternite: 112,
+            soldePaternite: 14,
+            congesPris: []
+        },
+        { upsert: true, new: true }
+    );
 };
 
 module.exports = mongoose.model('SoldeConge', soldeCongeSchema);

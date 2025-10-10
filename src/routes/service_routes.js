@@ -18,7 +18,7 @@ const router = express.Router();
 
 // Routes pour ADMIN_RH
 router.post("/", auth(["ADMIN_RH"]), createService);
-router.get("/", auth(["ADMIN_RH", "SALARIE"]), getAllServices); // ✅ SALARIE peut voir les services
+router.get("/", auth(["ADMIN_RH", "SALARIE", "STAGIAIRE"]), getAllServices); // ✅ SALARIE peut voir les services
 router.get("/:id", auth(["ADMIN_RH", "SALARIE"]), getServiceById);
 router.put("/:id", auth(["ADMIN_RH"]), updateService);
 router.patch("/:id/deactivate", auth(["ADMIN_RH"]), deactivateService); // ✅ Soft delete

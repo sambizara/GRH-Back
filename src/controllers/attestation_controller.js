@@ -10,7 +10,7 @@ exports.demandeSalarie = async (req, res) => {
             return res.status(400).json({ message: "Type d'attestation invalide pour un salarié" });
         }
         const nouvelleDemande = await Attestation.create({
-            user: req.user.userId,
+            user: req.user.id,
             typeAttestation,
             contenu,
             statut: 'En Attente'
@@ -25,7 +25,7 @@ exports.demandeSalarie = async (req, res) => {
 exports.previewSalarie = async (req, res) => {
     try {
         const { typeAttestation } = req.body;
-        const user = await User.findById(req.user.userId);
+        const user = await User.findById(req.user.id);
         
         const preview = {
             nom: user.nom,
@@ -43,38 +43,111 @@ exports.previewSalarie = async (req, res) => {
 // Créer demande par un stagiaire
 exports.demandeStagiaire = async (req, res) => {
     try {
+        console.log("📝 Demande attestation stagiaire - User ID:", req.user.id);
+        
         const { typeAttestation, contenu } = req.body;
         const enumType = ['Stage', 'Autre'];
         if (!enumType.includes(typeAttestation)) {
             return res.status(400).json({ message: "Type d'attestation invalide pour un stagiaire" });
         }
         const nouvelleDemande = await Attestation.create({
-            user: req.user.userId,  
+            user: req.user.id,
             typeAttestation,
             contenu,
             statut: 'En Attente'
         });
         res.status(201).json({ message: "Demande d'attestation créée avec succès", attestation: nouvelleDemande });
     } catch (error) {
+        console.error("❌ Erreur création demande:", error);
         res.status(500).json({ message: "Erreur serveur", error });
     }
 };
 
-// Vérifier l'éligibilité d'un stagiaire
+// Vérifier l'éligibilité d'un stagiaire - ⭐ UNE SEULE FONCTION
 exports.checkEligibility = async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId);
-        if (!user || user.role !== 'STAGIAIRE') {
-            return res.status(400).json({ eligible: false, reason: "Utilisateur non trouvé ou non stagiaire" });
+        console.log("=== 🟢 CHECK ELIGIBILITY APPELÉE ===");
+        console.log("🔍 User ID:", req.user.id);
+        
+        const user = await User.findById(req.user.id);
+        
+        if (!user) {
+            console.log("❌ Utilisateur non trouvé");
+            return res.status(404).json({ 
+                eligible: false, 
+                reason: "Utilisateur non trouvé" 
+            });
         }
 
-        if (!user.dateFinStage || new Date() < new Date(user.dateFinStage)) {
-            return res.status(400).json({ eligible: false, reason: "Stage en cours ou date de fin non définie" });
+        console.log("👤 User trouvé:", user.prenom, user.nom, "- Role:", user.role);
+
+        if (user.role !== 'STAGIAIRE') {
+            console.log("❌ Mauvais rôle:", user.role);
+            return res.status(400).json({ 
+                eligible: false, 
+                reason: "Accès réservé aux stagiaires" 
+            });
         }
 
-        res.json({ eligible: true });
+        if (!user.dateFinStage) {
+            console.log("❌ Date fin stage manquante");
+            return res.status(400).json({ 
+                eligible: false, 
+                reason: "Date de fin de stage non définie" 
+            });
+        }
+
+        const now = new Date();
+        const dateFin = new Date(user.dateFinStage);
+        const joursRestants = Math.ceil((dateFin - now) / (1000 * 60 * 60 * 24));
+
+        console.log("📅 Calcul éligibilité - Jours restants:", joursRestants);
+
+        // Éligible si stage terminé ou dans les 7 derniers jours
+        const eligible = joursRestants <= 7;
+
+        console.log("🎯 Résultat éligibilité:", eligible);
+
+        res.json({ 
+            eligible,
+            reason: eligible 
+                ? `Éligible - ${joursRestants <= 0 ? 'Stage terminé' : `Fin dans ${joursRestants} jour(s)`}`
+                : `Non éligible - ${joursRestants} jour(s) restant(s)`,
+            joursRestants,
+            dateFinStage: user.dateFinStage
+        });
+
     } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
+        console.error("💥 ERREUR dans checkEligibility:", error);
+        res.status(500).json({ 
+            message: "Erreur serveur", 
+            error: error.message 
+        });
+    }
+};
+
+// Récupérer les attestations de l'utilisateur connecté
+exports.getMesAttestations = async (req, res) => {
+    try {
+        console.log("📊 Récupération attestations pour user:", req.user.id);
+        
+        const attestations = await Attestation.find({ user: req.user.id })
+            .populate('user', 'nom prenom email role')
+            .sort({ createdAt: -1 });
+
+        console.log(`✅ ${attestations.length} attestation(s) trouvée(s)`);
+
+        res.status(200).json({
+            success: true,
+            attestations: attestations || []
+        });
+    } catch (error) {
+        console.error("❌ Erreur récupération attestations:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Erreur lors du chargement de vos attestations", 
+            error: error.message 
+        });
     }
 };
 
@@ -121,7 +194,7 @@ ${attestation.user.poste ? `Poste : ${attestation.user.poste}` : ''}
 
 ${attestation.contenu || `Cette attestation est délivrée pour faire valoir ce que de droit.`}
 
-Fait à [Ville], le ${new Date().toLocaleDateString('fr-FR')}
+Fait à Toamasina, le ${new Date().toLocaleDateString('fr-FR')}
 
 Signature
 _________________________

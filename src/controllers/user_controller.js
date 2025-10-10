@@ -1,5 +1,6 @@
 // controllers/user_controller.js
 const { User, Salarie, Stagiaire } = require("../models/user_model");
+const Service = require("../models/service_model"); // Ajouter cette ligne
 const bcrypt = require("bcryptjs");
 
 // 🔹 Ajouter un nouvel utilisateur
@@ -43,17 +44,28 @@ exports.createUser = async (req, res) => {
       });
     } 
     else if (role === "STAGIAIRE") {
-      const { ecole, filiere, niveau, dateDebutStage, dateFinStage, tuteur } = req.body;
+      const { ecole, filiere, niveau, dureeStage, poste } = req.body;
       
-      if (!ecole || !filiere || !niveau || !dateDebutStage || !dateFinStage) {
+      if (!ecole || !filiere || !niveau || !dureeStage || !poste) {
         return res.status(400).json({ 
-          message: "ecole, filiere, niveau, dateDebutStage et dateFinStage sont obligatoires pour un stagiaire." 
+          message: "ecole, filiere, niveau, dureeStage et poste sont obligatoires pour un stagiaire." 
+        });
+      }
+
+      // VÉRIFICATION DU POSTE - NOUVEAU
+      // Récupérer tous les services pour vérifier si le poste existe
+      const services = await Service.find({ actif: true });
+      const postesExistants = services.flatMap(service => service.postes || []);
+      
+      if (!postesExistants.includes(poste.toUpperCase())) {
+        return res.status(400).json({ 
+          message: `Le poste "${poste}" n'existe pas. Postes disponibles: ${postesExistants.join(', ')}` 
         });
       }
       
       newUser = new Stagiaire({ 
         nom, prenom, email, password, sexe, dateNaissance, telephone, adresse, 
-        ecole, filiere, niveau, dateDebutStage, dateFinStage, tuteur 
+        ecole, filiere, niveau, dureeStage, poste: poste.toUpperCase() 
       });
     } 
     else {
@@ -125,6 +137,19 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
 
+    // VÉRIFICATION DU POSTE POUR STAGIAIRE - NOUVEAU
+    if (existingUser.role === "STAGIAIRE" && updateData.poste) {
+      const services = await Service.find({ actif: true });
+      const postesExistants = services.flatMap(service => service.postes || []);
+      
+      if (!postesExistants.includes(updateData.poste.toUpperCase())) {
+        return res.status(400).json({ 
+          message: `Le poste "${updateData.poste}" n'existe pas. Postes disponibles: ${postesExistants.join(', ')}` 
+        });
+      }
+      updateData.poste = updateData.poste.toUpperCase();
+    }
+
     // Hasher le mot de passe si fourni
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
@@ -183,7 +208,6 @@ exports.updateUser = async (req, res) => {
     });
   }
 };
-
 
 // 🔹 Supprimer un utilisateur (soft delete)
 exports.deleteUser = async (req, res) => {
