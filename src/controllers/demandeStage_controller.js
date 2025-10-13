@@ -1,4 +1,4 @@
-// controllers/confirmation_controller.js
+// controllers/demandeStage_controller.js
 const Stage = require('../models/stage_model');
 const User = require('../models/user_model');
 const Notification = require('../models/notification_model');
@@ -9,11 +9,34 @@ exports.confirmerStagiaire = async (req, res) => {
         const { stageId } = req.params;
         const { theme, competencesRequises, objectifs, commentaires } = req.body;
 
+        console.log("🎯 Données reçues pour confirmation:");
+        console.log("- Stage ID:", stageId);
+        console.log("- Body:", req.body);
+        console.log("- Theme:", theme);
+        console.log("- Competences:", competencesRequises);
+        console.log("- Objectifs:", objectifs);
+        console.log("- Commentaires:", commentaires);
+
         // Vérifier que l'utilisateur est un salarié
         if (req.user.role !== 'SALARIE') {
             return res.status(403).json({
                 success: false,
                 message: "Accès réservé aux salariés"
+            });
+        }
+
+        // Validation des données requises
+        if (!theme) {
+            return res.status(400).json({
+                success: false,
+                message: "Le thème du stage est obligatoire"
+            });
+        }
+
+        if (!objectifs || !Array.isArray(objectifs) || objectifs.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Les objectifs du stage sont obligatoires et doivent être un tableau non vide"
             });
         }
 
@@ -47,28 +70,43 @@ exports.confirmerStagiaire = async (req, res) => {
         // Mettre à jour le stage
         stage.confirmationEncadreur.statut = 'confirmé';
         stage.confirmationEncadreur.dateConfirmation = new Date();
-        stage.confirmationEncadreur.commentaires = commentaires;
+        stage.confirmationEncadreur.commentaires = commentaires || "Stage confirmé par l'encadreur";
         stage.statut = 'Confirmé';
         
         // Ajouter les informations supplémentaires
-        if (theme) stage.theme = theme;
+        stage.sujet = theme;
         if (competencesRequises) stage.competencesRequises = competencesRequises;
-        if (objectifs) stage.objectifs = objectifs;
+        stage.objectifs = objectifs;
 
         await stage.save();
+
+        // Mettre à jour le statut du stagiaire dans User
+        await User.findByIdAndUpdate(stage.stagiaire._id, {
+            statutConfirmation: 'confirmé',
+            dateConfirmation: new Date()
+        });
 
         // Notification au stagiaire
         const notificationStagiaire = new Notification({
             user: stage.stagiaire._id,
             type: 'Stage confirmé',
-            message: `Votre stage a été confirmé par ${stage.encadreur.prenom} ${stage.encadreur.nom}. Thème: ${theme || stage.sujet}`
+            message: `Votre stage a été confirmé par ${stage.encadreur.prenom} ${stage.encadreur.nom}. Thème: ${theme}`
         });
         await notificationStagiaire.save();
+
+        console.log(`✅ Stage ${stageId} confirmé avec succès`);
 
         res.status(200).json({
             success: true,
             message: "Stagiaire confirmé avec succès",
-            stage
+            stage: {
+                _id: stage._id,
+                stagiaire: stage.stagiaire,
+                encadreur: stage.encadreur,
+                sujet: stage.sujet,
+                statut: stage.statut,
+                confirmationEncadreur: stage.confirmationEncadreur
+            }
         });
 
     } catch (error) {
@@ -86,6 +124,11 @@ exports.rejeterStagiaire = async (req, res) => {
     try {
         const { stageId } = req.params;
         const { motifRejet, commentaires } = req.body;
+
+        console.log("🗑️ Données reçues pour rejet:");
+        console.log("- Stage ID:", stageId);
+        console.log("- Motif:", motifRejet);
+        console.log("- Commentaires:", commentaires);
 
         if (!motifRejet) {
             return res.status(400).json({
@@ -138,6 +181,13 @@ exports.rejeterStagiaire = async (req, res) => {
 
         await stage.save();
 
+        // Mettre à jour le statut du stagiaire dans User
+        await User.findByIdAndUpdate(stage.stagiaire._id, {
+            statutConfirmation: 'rejeté',
+            dateConfirmation: new Date(),
+            motifRejet: motifRejet
+        });
+
         // Notification au stagiaire
         const notificationStagiaire = new Notification({
             user: stage.stagiaire._id,
@@ -157,10 +207,18 @@ exports.rejeterStagiaire = async (req, res) => {
             await notificationAdmin.save();
         }
 
+        console.log(`✅ Stage ${stageId} rejeté avec succès`);
+
         res.status(200).json({
             success: true,
             message: "Stagiaire rejeté avec succès",
-            stage
+            stage: {
+                _id: stage._id,
+                stagiaire: stage.stagiaire,
+                encadreur: stage.encadreur,
+                statut: stage.statut,
+                confirmationEncadreur: stage.confirmationEncadreur
+            }
         });
 
     } catch (error) {
@@ -191,6 +249,8 @@ exports.getStagiairesEnAttente = async (req, res) => {
         })
         .populate('stagiaire', 'nom prenom email ecole filiere niveau telephone poste dureeStage')
         .sort({ createdAt: -1 });
+
+        console.log(`📋 ${stages.length} stages en attente pour l'encadreur ${req.user.id}`);
 
         res.status(200).json({
             success: true,
@@ -237,6 +297,47 @@ exports.getHistoriqueConfirmations = async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Erreur lors de la récupération de l'historique",
+            error: error.message
+        });
+    }
+};
+
+// 🔹 Récupérer les stagiaires encadrés par un salarié (stages confirmés)
+exports.getMesStagiaires = async (req, res) => {
+    try {
+        // Vérifier que l'utilisateur est un salarié
+        if (req.user.role !== 'SALARIE') {
+            return res.status(403).json({
+                success: false,
+                message: "Accès réservé aux salariés"
+            });
+        }
+
+        const stages = await Stage.find({
+            encadreur: req.user.id,
+            'confirmationEncadreur.statut': 'confirmé',
+            statut: 'Confirmé'
+        })
+        .populate('stagiaire', 'nom prenom email ecole filiere niveau telephone poste dureeStage')
+        .sort({ 'confirmationEncadreur.dateConfirmation': -1 });
+
+        console.log(`👥 ${stages.length} stagiaires confirmés pour l'encadreur ${req.user.id}`);
+
+        res.status(200).json({
+            success: true,
+            count: stages.length,
+            stages: stages.map(stage => ({
+                ...stage.toObject(),
+                stagiaire: stage.stagiaire,
+                dateConfirmation: stage.confirmationEncadreur.dateConfirmation
+            }))
+        });
+
+    } catch (error) {
+        console.error("❌ Erreur récupération des stagiaires encadrés:", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur lors de la récupération des stagiaires encadrés",
             error: error.message
         });
     }

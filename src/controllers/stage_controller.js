@@ -1,6 +1,6 @@
 // controllers/stage_controller.js
 const Stage = require('../models/stage_model');
-const User = require('../models/user_model');
+const { User, Stagiaire } = require('../models/user_model'); // CORRECTION ICI
 const Notification = require('../models/notification_model');
 
 // Créer un nouveau stage (ADMIN_RH uniquement)
@@ -76,7 +76,7 @@ exports.createStage = async (req, res) => {
             sujet,
             dateDebut,
             dateFin,
-            statut: encadreurId ? 'En attente' : 'En attente', // Toujours en attente maintenant
+            statut: encadreurId ? 'En attente' : 'En attente',
             confirmationEncadreur: {
                 statut: encadreurId ? 'en_attente' : 'en_attente'
             }
@@ -501,174 +501,6 @@ exports.notifyUser = async (req, res) => {
             success: false,
             message: "Erreur lors de l'envoi de la notification", 
             error: error.message 
-        });
-    }
-};
-
-// 🔹 Récupérer les stages proposés pour un salarié
-exports.getStagesProposes = async (req, res) => {
-    try {
-        const stages = await Stage.find({
-            encadreur: req.user.id,
-            statut: 'Proposé'
-        })
-        .populate('stagiaire', 'nom prenom email role ecole filiere niveau poste dureeStage telephone adresse')
-        .sort({ createdAt: -1 });
-
-        res.status(200).json({
-            success: true,
-            count: stages.length,
-            stages
-        });
-
-    } catch (error) {
-        console.error("❌ Erreur récupération stages proposés:", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur lors de la récupération des stages proposés",
-            error: error.message
-        });
-    }
-};
-
-// 🔹 Confirmer un stage proposé
-exports.confirmerStagePropose = async (req, res) => {
-    try {
-        const { theme, competencesRequises, objectifs, commentaires } = req.body;
-
-        const stage = await Stage.findById(req.params.id);
-        if (!stage) {
-            return res.status(404).json({
-                success: false,
-                message: "Stage non trouvé"
-            });
-        }
-
-        // Vérifier que le stage appartient bien au salarié
-        if (stage.encadreur.toString() !== req.user.id) {
-            return res.status(403).json({
-                success: false,
-                message: "Vous n'êtes pas autorisé à modifier ce stage"
-            });
-        }
-
-        // Vérifier que le stage est bien "Proposé"
-        if (stage.statut !== 'Proposé') {
-            return res.status(400).json({
-                success: false,
-                message: "Ce stage n'est pas en statut 'Proposé'"
-            });
-        }
-
-        // Mettre à jour le stage
-        stage.statut = 'Confirmé';
-        stage.confirmationEncadreur = {
-            statut: 'confirmé',
-            dateConfirmation: new Date(),
-            commentaires: commentaires || ''
-        };
-        
-        // Ajouter les informations supplémentaires
-        if (theme) stage.theme = theme;
-        if (competencesRequises) stage.competencesRequises = competencesRequises;
-        if (objectifs) stage.objectifs = objectifs;
-
-        await stage.save();
-
-        const stagePopule = await Stage.findById(stage._id)
-            .populate('stagiaire', 'nom prenom email role ecole filiere niveau poste dureeStage')
-            .populate('encadreur', 'nom prenom email role');
-
-        // Notification au stagiaire
-        const notification = new Notification({
-            user: stage.stagiaire._id,
-            type: 'Stage confirmé',
-            message: `Votre stage a été confirmé par ${req.user.prenom} ${req.user.nom}. Poste: ${stagePopule.stagiaire.poste}`
-        });
-        await notification.save();
-
-        res.status(200).json({
-            success: true,
-            message: 'Stage confirmé avec succès',
-            stage: stagePopule
-        });
-
-    } catch (error) {
-        console.error("❌ Erreur confirmation stage:", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur lors de la confirmation du stage",
-            error: error.message
-        });
-    }
-};
-
-// 🔹 Rejeter un stage proposé
-exports.rejeterStagePropose = async (req, res) => {
-    try {
-        const { motifRejet, commentaires } = req.body;
-
-        if (!motifRejet) {
-            return res.status(400).json({
-                success: false,
-                message: "Le motif de rejet est obligatoire"
-            });
-        }
-
-        const stage = await Stage.findById(req.params.id);
-        if (!stage) {
-            return res.status(404).json({
-                success: false,
-                message: "Stage non trouvé"
-            });
-        }
-
-        // Vérifier que le stage appartient bien au salarié
-        if (stage.encadreur.toString() !== req.user.id) {
-            return res.status(403).json({
-                success: false,
-                message: "Vous n'êtes pas autorisé à modifier ce stage"
-            });
-        }
-
-        // Vérifier que le stage est bien "Proposé"
-        if (stage.statut !== 'Proposé') {
-            return res.status(400).json({
-                success: false,
-                message: "Ce stage n'est pas en statut 'Proposé'"
-            });
-        }
-
-        // Mettre à jour le stage
-        stage.statut = 'Rejeté';
-        stage.confirmationEncadreur = {
-            statut: 'rejeté',
-            dateConfirmation: new Date(),
-            motifRejet: motifRejet,
-            commentaires: commentaires || ''
-        };
-
-        await stage.save();
-
-        // Notification à l'admin RH (optionnel)
-        const notification = new Notification({
-            user: stage.stagiaire._id, // Ou trouver un admin RH
-            type: 'Stage rejeté',
-            message: `Le stage de ${stage.stagiaire.prenom} ${stage.stagiaire.nom} a été rejeté par ${req.user.prenom} ${req.user.nom}. Motif: ${motifRejet}`
-        });
-        await notification.save();
-
-        res.status(200).json({
-            success: true,
-            message: 'Stage rejeté avec succès'
-        });
-
-    } catch (error) {
-        console.error("❌ Erreur rejet stage:", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur lors du rejet du stage",
-            error: error.message
         });
     }
 };

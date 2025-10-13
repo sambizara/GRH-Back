@@ -8,7 +8,9 @@ const {
   deleteUser,
   getCurrentUser,
   updateCurrentUser,
-  activateUser
+  activateUser,
+  getSalariesDisponibles,
+  getUsersDesactives // AJOUTER CETTE LIGNE
 } = require("../controllers/user_controller");
 const auth = require("../middlewares/auth_middleware");
 
@@ -25,5 +27,11 @@ router.get("/:id", auth(["ADMIN_RH"]), getUserById);
 router.put("/:id", auth(["ADMIN_RH"]), updateUser);
 router.delete("/:id", auth(["ADMIN_RH"]), deleteUser);
 router.patch("/:id/activate", auth(["ADMIN_RH"]), activateUser);
+
+// 🔹 ROUTE UNIQUE : Récupérer les salariés disponibles (pour encadrement OU autres affectations)
+router.get("/salaries/disponibles", auth(["ADMIN_RH"]), getSalariesDisponibles);
+
+// 🔹 NOUVELLE ROUTE : Récupérer les utilisateurs désactivés
+router.get("/admin/desactives", auth(["ADMIN_RH"]), getUsersDesactives);
 
 module.exports = router;

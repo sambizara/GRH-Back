@@ -26,9 +26,10 @@ const stageSchema = new mongoose.Schema({
     },
     statut: {
         type: String,
-        enum: ['Proposé', 'En attente', 'Confirmé', 'En cours', 'Terminé', 'Annulé', 'Rejeté'],
-        default: 'Proposé'  // ✅ Changé de 'En attente' à 'Proposé'
+        enum: ['En attente', 'Confirmé', 'En cours', 'Terminé', 'Annulé', 'Rejeté'],
+        default: 'En attente'
     },
+    // NOUVEAU: Statut de confirmation par l'encadreur
     confirmationEncadreur: {
         statut: {
             type: String,
@@ -39,15 +40,11 @@ const stageSchema = new mongoose.Schema({
         motifRejet: String,
         commentaires: String
     },
-    theme: {
-        type: String,
-        trim: true
-    },
-    competencesRequises: [{
+    objectifs: [{
         type: String,
         trim: true
     }],
-    objectifs: [{
+    descriptifs: [{
         type: String,
         trim: true
     }]

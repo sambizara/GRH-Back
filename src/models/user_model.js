@@ -58,7 +58,7 @@ const salarieSchema = new mongoose.Schema({
     enum: ["Célibataire", "Marié(e)", "Divorcé(e)", "Veuf(ve)"], 
     default: "Célibataire" 
   },
-  nombreEnfants: { type: Number, default: 0 }
+  nombreEnfants: { type: Number, default: 0 },
 }, options);
 
 // --- Schéma pour Stagiaire ---
@@ -76,12 +76,26 @@ const stagiaireSchema = new mongoose.Schema({
     min: 1,
     comment: "Durée du stage en mois"
   },
-  poste: {
+  encadreur: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    validate: {
+      validator: async function(value) {
+        if (!value) return true; // Encadreur optionnel
+        const encadreur = await mongoose.model('User').findById(value);
+        return encadreur && encadreur.role === "SALARIE";
+      },
+      message: "L'encadreur doit être un salarié existant"
+    }
+  },
+  statutConfirmation: {
     type: String,
-    required: true,
-    trim: true,
-    uppercase: true
-  }
+    enum: ['en_attente', 'confirmé', 'rejeté'],
+    default: 'en_attente'
+  },
+  dateConfirmation: Date,
+  motifRejet: String,
+  commentairesEncadreur: String
 }, options);
 
 // --- Discriminators ---

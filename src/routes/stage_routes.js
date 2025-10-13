@@ -11,10 +11,7 @@ const {
     notifyUser,
     getStagesSansEncadreur,
     getMonStage,
-    getStagesEncadres,
-    getStagesProposes,
-    confirmerStagePropose,
-    rejeterStagePropose
+    getStagesEncadres
 } = require("../controllers/stage_controller");
 
 const auth = require("../middlewares/auth_middleware");
@@ -53,10 +50,5 @@ router.delete("/:id", auth(["ADMIN_RH"]), deleteStage);
 
 // 🔹 ADMIN_RH : Envoyer une notification (fonction utilitaire)
 router.post("/notifier", auth(["ADMIN_RH"]), notifyUser);
-
-// ✅ NOUVELLES ROUTES POUR LE SYSTÈME AUTOMATIQUE
-router.get("/mes-stages-proposes", auth(["SALARIE"]), getStagesProposes);
-router.post("/:id/confirmer-propose", auth(["SALARIE"]), confirmerStagePropose);
-router.post("/:id/rejeter-propose", auth(["SALARIE"]), rejeterStagePropose);
 
 module.exports = router;

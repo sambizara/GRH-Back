@@ -1,7 +1,115 @@
 // controllers/user_controller.js
 const { User, Salarie, Stagiaire } = require("../models/user_model");
-const Service = require("../models/service_model"); // Ajouter cette ligne
+const Contrat = require("../models/contrat_model");
+const Stage = require("../models/stage_model");
 const bcrypt = require("bcryptjs");
+
+// 🔹 Vérifier si un salarié peut être encadreur (a un contrat actif)
+const verifierEncadreur = async (encadreurId) => {
+  if (!encadreurId) return true; // Encadreur optionnel
+  
+  const encadreur = await User.findById(encadreurId);
+  if (!encadreur || encadreur.role !== "SALARIE") {
+    throw new Error("L'encadreur doit être un salarié existant");
+  }
+
+  // Vérifier si le salarié a un contrat actif
+  const contratActif = await Contrat.findOne({ 
+    user: encadreurId, 
+    statut: 'Actif'
+  });
+
+  if (!contratActif) {
+    throw new Error("Le salarié sélectionné n'a pas de contrat actif");
+  }
+
+  return true;
+};
+
+// 🔹 Récupérer les salariés disponibles (avec contrat actif) - UNIQUE FONCTION
+exports.getSalariesDisponibles = async (req, res) => {
+  try {
+    // Récupérer tous les salariés actifs
+    const tousLesSalaries = await Salarie.find({ actif: true })
+      .select('nom prenom matricule email telephone dateEmbauche')
+      .sort({ nom: 1, prenom: 1 });
+
+    if (tousLesSalaries.length === 0) {
+      return res.status(200).json({
+        success: true,
+        salaries: [],
+        total: 0,
+        message: "Aucun salarié trouvé"
+      });
+    }
+
+    // Récupérer les contrats actifs pour ces salariés
+    const contratsActifs = await Contrat.find({ 
+      statut: 'Actif',
+      user: { $in: tousLesSalaries.map(s => s._id) }
+    })
+    .populate('user', 'nom prenom')
+    .populate('service', 'nomService');
+
+    // Créer un Map des IDs des salariés avec contrat actif
+    const salarieAvecContrat = new Map();
+    contratsActifs.forEach(contrat => {
+      if (contrat.user) {
+        salarieAvecContrat.set(contrat.user._id.toString(), {
+          contratId: contrat._id,
+          typeContrat: contrat.typeContrat,
+          dateDebut: contrat.dateDebut,
+          dateFin: contrat.dateFin,
+          posteContrat: contrat.poste,
+          salaire: contrat.salaire,
+          service: contrat.service
+        });
+      }
+    });
+
+    // Filtrer les salariés pour ne garder que ceux avec contrat actif
+    const salariesDisponibles = tousLesSalaries.filter(s => 
+      salarieAvecContrat.has(s._id.toString())
+    ).map(salarie => {
+      const infoContrat = salarieAvecContrat.get(salarie._id.toString());
+      return {
+        _id: salarie._id,
+        nom: salarie.nom,
+        prenom: salarie.prenom,
+        matricule: salarie.matricule,
+        email: salarie.email,
+        telephone: salarie.telephone,
+        dateEmbauche: salarie.dateEmbauche,
+        // Informations du contrat
+        contratId: infoContrat.contratId,
+        typeContrat: infoContrat.typeContrat,
+        dateDebutContrat: infoContrat.dateDebut,
+        dateFinContrat: infoContrat.dateFin,
+        salaire: infoContrat.salaire,
+        service: infoContrat.service,
+        posteActuel: infoContrat.posteContrat
+      };
+    });
+
+    console.log(`📊 ${salariesDisponibles.length}/${tousLesSalaries.length} salariés disponibles (avec contrat actif)`);
+
+    res.status(200).json({
+      success: true,
+      salaries: salariesDisponibles,
+      total: salariesDisponibles.length,
+      message: salariesDisponibles.length === 0 
+        ? "Aucun salarié avec contrat actif trouvé" 
+        : `${salariesDisponibles.length} salarié(s) disponible(s) trouvé(s)`
+    });
+  } catch (error) {
+    console.error("❌ Erreur récupération salariés disponibles:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erreur serveur lors de la récupération des salariés disponibles", 
+      error: error.message 
+    });
+  }
+};
 
 // 🔹 Ajouter un nouvel utilisateur
 exports.createUser = async (req, res) => {
@@ -44,28 +152,56 @@ exports.createUser = async (req, res) => {
       });
     } 
     else if (role === "STAGIAIRE") {
-      const { ecole, filiere, niveau, dureeStage, poste } = req.body;
+      const { ecole, filiere, niveau, dureeStage, encadreur, poste } = req.body;
       
-      if (!ecole || !filiere || !niveau || !dureeStage || !poste) {
+      if (!ecole || !filiere || !niveau || !dureeStage || !encadreur) {
         return res.status(400).json({ 
-          message: "ecole, filiere, niveau, dureeStage et poste sont obligatoires pour un stagiaire." 
+          message: "ecole, filiere, niveau, dureeStage et encadreur sont obligatoires pour un stagiaire." 
         });
       }
 
-      // VÉRIFICATION DU POSTE - NOUVEAU
-      // Récupérer tous les services pour vérifier si le poste existe
-      const services = await Service.find({ actif: true });
-      const postesExistants = services.flatMap(service => service.postes || []);
-      
-      if (!postesExistants.includes(poste.toUpperCase())) {
-        return res.status(400).json({ 
-          message: `Le poste "${poste}" n'existe pas. Postes disponibles: ${postesExistants.join(', ')}` 
-        });
+      // Vérifier si l'encadreur existe et a un contrat actif
+      if (encadreur) {
+        await verifierEncadreur(encadreur);
       }
       
       newUser = new Stagiaire({ 
         nom, prenom, email, password, sexe, dateNaissance, telephone, adresse, 
-        ecole, filiere, niveau, dureeStage, poste: poste.toUpperCase() 
+        ecole, filiere, niveau, dureeStage, encadreur, poste,
+        statutConfirmation: 'en_attente'
+      });
+
+      await newUser.save();
+
+      // 🔹 CRÉATION AUTOMATIQUE DU STAGE quand on crée un stagiaire
+      const stage = new Stage({
+        stagiaire: newUser._id,
+        encadreur: encadreur,
+        sujet: `Stage en ${poste || 'développement'} - ${filiere}`,
+        dateDebut: new Date(),
+        dateFin: new Date(new Date().setMonth(new Date().getMonth() + parseInt(dureeStage))),
+        statut: 'En attente',
+        confirmationEncadreur: {
+          statut: 'en_attente'
+        },
+        objectifs: [
+          `Acquérir des compétences en ${poste || 'développement'}`,
+          `Mettre en pratique les connaissances acquises en ${filiere}`,
+          `Contribuer aux projets de l'entreprise`
+        ],
+        descriptifs: [
+          `Stage de ${dureeStage} mois en ${poste || 'développement'}`,
+          `Étudiant en ${niveau} - ${filiere}`
+        ]
+      });
+
+      await stage.save();
+      console.log("✅ Stage créé automatiquement pour le stagiaire:", newUser._id);
+
+      return res.status(201).json({ 
+        message: "Stagiaire créé avec succès", 
+        user: newUser,
+        stage: stage 
       });
     } 
     else {
@@ -90,10 +226,10 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// 🔹 Récupérer tous les utilisateurs
+// 🔹 Récupérer tous les utilisateurs (seulement les actifs)
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password");
+    const users = await User.find({ actif: true }).select("-password");
     res.status(200).json(users);
   } catch (error) {
     console.error("❌ Erreur récupération utilisateurs:", error);
@@ -104,10 +240,10 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// 🔹 Récupérer un utilisateur par ID
+// 🔹 Récupérer un utilisateur par ID (seulement si actif)
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    const user = await User.findOne({ _id: req.params.id, actif: true }).select("-password");
     if (!user) {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
@@ -135,19 +271,6 @@ exports.updateUser = async (req, res) => {
     const existingUser = await User.findById(userId);
     if (!existingUser) {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
-    }
-
-    // VÉRIFICATION DU POSTE POUR STAGIAIRE - NOUVEAU
-    if (existingUser.role === "STAGIAIRE" && updateData.poste) {
-      const services = await Service.find({ actif: true });
-      const postesExistants = services.flatMap(service => service.postes || []);
-      
-      if (!postesExistants.includes(updateData.poste.toUpperCase())) {
-        return res.status(400).json({ 
-          message: `Le poste "${updateData.poste}" n'existe pas. Postes disponibles: ${postesExistants.join(', ')}` 
-        });
-      }
-      updateData.poste = updateData.poste.toUpperCase();
     }
 
     // Hasher le mot de passe si fourni
@@ -212,23 +335,50 @@ exports.updateUser = async (req, res) => {
 // 🔹 Supprimer un utilisateur (soft delete)
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findOneAndUpdate(
-      { _id: req.params.id },
+    const userId = req.params.id;
+    
+    console.log(`🗑️ Tentative de suppression de l'utilisateur: ${userId}`);
+    
+    // Vérifier d'abord si l'utilisateur existe
+    const userExist = await User.findById(userId);
+    if (!userExist) {
+      console.log(`❌ Utilisateur ${userId} non trouvé`);
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    console.log(`📋 Utilisateur trouvé: ${userExist.nom} ${userExist.prenom} (${userExist.role})`);
+
+    // Soft delete - marquer comme inactif
+    const user = await User.findByIdAndUpdate(
+      userId,
       { actif: false },
       { new: true }
     );
 
     if (!user) {
+      console.log(`❌ Échec de la mise à jour de l'utilisateur ${userId}`);
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
 
+    console.log(`✅ Utilisateur ${userId} désactivé avec succès`);
+
     res.status(200).json({ 
-      message: "Utilisateur désactivé avec succès" 
+      success: true,
+      message: "Utilisateur désactivé avec succès",
+      user: {
+        _id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        email: user.email,
+        role: user.role,
+        actif: user.actif
+      }
     });
   } catch (error) {
     console.error("❌ Erreur suppression:", error);
     res.status(500).json({ 
-      message: "Erreur serveur", 
+      success: false,
+      message: "Erreur serveur lors de la suppression", 
       error: error.message 
     });
   }
@@ -309,6 +459,20 @@ exports.updateCurrentUser = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Erreur mise à jour profil:", error);
+    res.status(500).json({ 
+      message: "Erreur serveur", 
+      error: error.message 
+    });
+  }
+};
+
+// 🔹 Récupérer les utilisateurs désactivés (optionnel)
+exports.getUsersDesactives = async (req, res) => {
+  try {
+    const users = await User.find({ actif: false }).select("-password");
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("❌ Erreur récupération utilisateurs désactivés:", error);
     res.status(500).json({ 
       message: "Erreur serveur", 
       error: error.message 
