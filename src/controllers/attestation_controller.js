@@ -1,5 +1,5 @@
 const Attestation = require("../models/attestation_model");
-const User = require("../models/user_model");
+const { User} = require("../models/user_model");
 
 // Créer demande par un salarié
 exports.demandeSalarie = async (req, res) => {
@@ -23,22 +23,32 @@ exports.demandeSalarie = async (req, res) => {
 
 // Prévisualiser demandes par un salarié
 exports.previewSalarie = async (req, res) => {
-    try {
-        const { typeAttestation } = req.body;
-        const user = await User.findById(req.user.id);
-        
-        const preview = {
-            nom: user.nom,
-            prenom: user.prenom,
-            typeAttestation: typeAttestation,
-            date: new Date().toLocaleDateString(),
-            contenu: `Ceci est une attestation de type ${typeAttestation} pour ${user.nom} ${user.prenom}.`
-        };
-        res.status(200).json(preview);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "Utilisateur non authentifié" });
     }
-};   
+
+    const { typeAttestation } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+
+    const preview = {
+      nom: user.nom,
+      prenom: user.prenom,
+      typeAttestation,
+      date: new Date().toLocaleDateString(),
+      contenu: `Ceci est une attestation de type ${typeAttestation} pour ${user.nom} ${user.prenom}.`
+    };
+
+    res.status(200).json(preview);
+  } catch (error) {
+    console.error("💥 Erreur previewSalarie:", error);
+    res.status(500).json({ message: "Erreur lors de la prévisualisation", error: error.message });
+  }
+};  
 
 // Créer demande par un stagiaire
 exports.demandeStagiaire = async (req, res) => {

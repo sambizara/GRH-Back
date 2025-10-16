@@ -35,7 +35,9 @@ module.exports = (roles = []) => {
             
             // Récupérer l'utilisateur depuis la base de données
             console.log("🔍 Recherche de l'utilisateur avec ID:", decoded.id);
-            const user = await User.findById(decoded.id).select('-password');
+            
+            // ⭐⭐ CORRECTION : Ne pas exclure le password pour les routes qui en ont besoin
+            const user = await User.findById(decoded.id);
             
             if (!user) {
                 console.log("❌ Utilisateur non trouvé pour l'ID:", decoded.id);
@@ -48,16 +50,25 @@ module.exports = (roles = []) => {
                 email: user.email
             });
 
-            // ⭐⭐ CORRECTION : Assigner correctement req.user
+            // Assigner correctement req.user
             req.user = {
                 id: user._id.toString(),
                 role: user.role,
                 email: user.email,
                 nom: user.nom,
-                prenom: user.prenom
+                prenom: user.prenom,
+                // ⭐⭐ CORRECTION : Inclure le password hashé pour les vérifications
+                password: user.password
             };
 
-            console.log("✅ req.user défini:", req.user);
+            console.log("✅ req.user défini:", {
+                id: req.user.id,
+                role: req.user.role,
+                email: req.user.email,
+                nom: req.user.nom,
+                prenom: req.user.prenom,
+                passwordPresent: !!req.user.password
+            });
 
             // Vérifier les rôles autorisés
             if (roles.length > 0) {

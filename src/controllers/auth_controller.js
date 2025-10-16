@@ -7,7 +7,7 @@ exports.register = async (req, res) => {
   const { nom, prenom, email, password, sexe, dateNaissance, adresse, role } = req.body;
 
   try {
-    // Vérifier si l’email existe déjà
+    // Vérifier si l'email existe déjà
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email déjà utilisé" });
@@ -29,7 +29,7 @@ exports.register = async (req, res) => {
 
     res.status(201).json({ message: "Utilisateur enregistré avec succès" });
   } catch (error) {
-    res.status(500).json({ message: "Erreur serveur", eerror: error.message || error });
+    res.status(500).json({ message: "Erreur serveur", error: error.message || error });
   }
 };
 
@@ -38,7 +38,7 @@ exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Vérifier si l’utilisateur existe
+    // Vérifier si l'utilisateur existe
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: "Email ou mot de passe incorrect" });
@@ -79,5 +79,36 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error: error.message || error });
+  }
+};
+
+// 🔹 Vérifier le mot de passe actuel
+exports.verifyPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    console.log("🔐 Vérification du mot de passe pour l'utilisateur:", req.user.id);
+    console.log("📝 Mot de passe reçu:", password ? `Longueur: ${password.length} caractères` : "Non fourni");
+    
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      console.log("❌ Utilisateur non trouvé");
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    console.log("🔍 Comparaison avec le mot de passe hashé de l'utilisateur:", user.email);
+    
+    // Vérifier le mot de passe avec bcrypt
+    const isMatch = await bcrypt.compare(password, user.password);
+    
+    console.log("✅ Résultat de la comparaison:", isMatch);
+    
+    res.status(200).json({ isValid: isMatch });
+  } catch (error) {
+    console.error("❌ Erreur vérification mot de passe:", error);
+    res.status(500).json({ 
+      message: "Erreur serveur", 
+      error: error.message 
+    });
   }
 };

@@ -9,7 +9,7 @@ const contratSchema = new mongoose.Schema({
   },
   typeContrat: { 
     type: String, 
-    enum: ["CDI", "CDD", "Alternance", "Stage"],
+    enum: ["CDI", "CDD", "Alternance"],
     required: true 
   },
   dateDebut: { 
