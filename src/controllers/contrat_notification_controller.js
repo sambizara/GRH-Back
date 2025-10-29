@@ -4,6 +4,7 @@ const ContratNotificationService = require("../models/notification_service");
 // 🔹 Récupérer les détails des contrats arrivant à expiration
 exports.getExpiringContrats = async (req, res) => {
   try {
+    console.log("🔍 Demande de contrats expirants reçue");
     const contratsExpiring = await ContratNotificationService.getExpiringContratsDetails();
     
     res.status(200).json({
@@ -23,6 +24,7 @@ exports.getExpiringContrats = async (req, res) => {
 // 🔹 Récupérer les statistiques d'expiration
 exports.getExpirationStats = async (req, res) => {
   try {
+    console.log("📊 Demande de statistiques expiration reçue");
     const stats = await ContratNotificationService.getContratExpirationStats();
     
     res.status(200).json({
@@ -42,6 +44,7 @@ exports.getExpirationStats = async (req, res) => {
 // 🔹 Vérifier et créer les notifications d'expiration
 exports.checkAndCreateNotifications = async (req, res) => {
   try {
+    console.log("🔔 Demande de vérification notifications reçue");
     const notificationsCreated = await ContratNotificationService.checkAndCreateExpirationNotifications();
     
     res.status(200).json({
@@ -63,6 +66,7 @@ exports.checkAndCreateNotifications = async (req, res) => {
 exports.createAdminNotification = async (req, res) => {
   try {
     const adminUserId = req.user.id; // L'admin connecté
+    console.log(`👨‍💼 Demande notification admin pour: ${adminUserId}`);
     
     const notification = await ContratNotificationService.createAdminExpirationNotification(adminUserId);
     

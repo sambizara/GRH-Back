@@ -1,39 +1,38 @@
 const Attestation = require("../models/attestation_model");
-const { User} = require("../models/user_model");
+const { User } = require("../models/user_model");
 
-// Créer demande par un salarié
+// 🧾 1️⃣ Demande manuelle d’un salarié
 exports.demandeSalarie = async (req, res) => {
-    try {
-        const { typeAttestation, contenu } = req.body;
-        const enumType = ['Travail', 'Salaire', 'Autre'];
-        if (!enumType.includes(typeAttestation)) {
-            return res.status(400).json({ message: "Type d'attestation invalide pour un salarié" });
-        }
-        const nouvelleDemande = await Attestation.create({
-            user: req.user.id,
-            typeAttestation,
-            contenu,
-            statut: 'En Attente'
-        });
-        res.status(201).json({ message: "Demande d'attestation créée avec succès", attestation: nouvelleDemande });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
+  try {
+    const { typeAttestation, contenu } = req.body;
+    const enumType = ['Travail', 'Salaire', 'Autre'];
+    
+    if (!enumType.includes(typeAttestation)) {
+      return res.status(400).json({ message: "Type d'attestation invalide pour un salarié" });
     }
+
+    const nouvelleDemande = await Attestation.create({
+      user: req.user.id,
+      typeAttestation,
+      contenu,
+      statut: 'En Attente'
+    });
+
+    res.status(201).json({
+      message: "Demande d'attestation créée avec succès",
+      attestation: nouvelleDemande
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur serveur", error });
+  }
 };
 
-// Prévisualiser demandes par un salarié
+// 🧩 2️⃣ Prévisualisation pour salarié
 exports.previewSalarie = async (req, res) => {
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({ message: "Utilisateur non authentifié" });
-    }
-
     const { typeAttestation } = req.body;
     const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ message: "Utilisateur introuvable" });
-    }
+    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
 
     const preview = {
       nom: user.nom,
@@ -42,215 +41,116 @@ exports.previewSalarie = async (req, res) => {
       date: new Date().toLocaleDateString(),
       contenu: `Ceci est une attestation de type ${typeAttestation} pour ${user.nom} ${user.prenom}.`
     };
-
     res.status(200).json(preview);
   } catch (error) {
-    console.error("💥 Erreur previewSalarie:", error);
-    res.status(500).json({ message: "Erreur lors de la prévisualisation", error: error.message });
+    res.status(500).json({ message: "Erreur lors de la prévisualisation", error });
   }
-};  
+};
 
-// Créer demande par un stagiaire
+// 🚫 3️⃣ Suppression de la demande stagiaire (plus de demande manuelle)
 exports.demandeStagiaire = async (req, res) => {
-    try {
-        console.log("📝 Demande attestation stagiaire - User ID:", req.user.id);
-        
-        const { typeAttestation, contenu } = req.body;
-        const enumType = ['Stage', 'Autre'];
-        if (!enumType.includes(typeAttestation)) {
-            return res.status(400).json({ message: "Type d'attestation invalide pour un stagiaire" });
-        }
-        const nouvelleDemande = await Attestation.create({
-            user: req.user.id,
-            typeAttestation,
-            contenu,
-            statut: 'En Attente'
-        });
-        res.status(201).json({ message: "Demande d'attestation créée avec succès", attestation: nouvelleDemande });
-    } catch (error) {
-        console.error("❌ Erreur création demande:", error);
-        res.status(500).json({ message: "Erreur serveur", error });
-    }
+  res.status(403).json({
+    message: "Les stagiaires ne peuvent pas demander d’attestation manuellement. Elle est générée automatiquement à la fin du stage."
+  });
 };
 
-// Vérifier l'éligibilité d'un stagiaire - ⭐ UNE SEULE FONCTION
-exports.checkEligibility = async (req, res) => {
-    try {
-        console.log("=== 🟢 CHECK ELIGIBILITY APPELÉE ===");
-        console.log("🔍 User ID:", req.user.id);
-        
-        const user = await User.findById(req.user.id);
-        
-        if (!user) {
-            console.log("❌ Utilisateur non trouvé");
-            return res.status(404).json({ 
-                eligible: false, 
-                reason: "Utilisateur non trouvé" 
-            });
-        }
+// 🧠 4️⃣ Génération automatique quand stage terminé
+exports.genererAutomatiqueStage = async (stagiaireId, adminId = null) => {
+  const stagiaire = await User.findById(stagiaireId).populate('service');
+  if (!stagiaire) throw new Error("Stagiaire introuvable");
 
-        console.log("👤 User trouvé:", user.prenom, user.nom, "- Role:", user.role);
+  const contenu = `
+ATTESTATION DE STAGE
 
-        if (user.role !== 'STAGIAIRE') {
-            console.log("❌ Mauvais rôle:", user.role);
-            return res.status(400).json({ 
-                eligible: false, 
-                reason: "Accès réservé aux stagiaires" 
-            });
-        }
+Nous soussignés, [Nom de l’entreprise], certifions que ${stagiaire.nom} ${stagiaire.prenom} 
+a effectué un stage au sein du service ${stagiaire.service?.nomService || '—'} 
+du ${stagiaire.dateDebutStage?.toLocaleDateString('fr-FR') || '—'} 
+au ${stagiaire.dateFinStage?.toLocaleDateString('fr-FR') || '—'}.
 
-        if (!user.dateFinStage) {
-            console.log("❌ Date fin stage manquante");
-            return res.status(400).json({ 
-                eligible: false, 
-                reason: "Date de fin de stage non définie" 
-            });
-        }
+Le stage s’est déroulé avec assiduité et professionnalisme.
 
-        const now = new Date();
-        const dateFin = new Date(user.dateFinStage);
-        const joursRestants = Math.ceil((dateFin - now) / (1000 * 60 * 60 * 24));
+Fait à Toamasina, le ${new Date().toLocaleDateString('fr-FR')}.
+`;
 
-        console.log("📅 Calcul éligibilité - Jours restants:", joursRestants);
+  const attestation = new Attestation({
+    user: stagiaire._id,
+    typeAttestation: 'Stage',
+    contenu,
+    statut: 'Automatique',
+    generePar: adminId
+  });
 
-        // Éligible si stage terminé ou dans les 7 derniers jours
-        const eligible = joursRestants <= 7;
-
-        console.log("🎯 Résultat éligibilité:", eligible);
-
-        res.json({ 
-            eligible,
-            reason: eligible 
-                ? `Éligible - ${joursRestants <= 0 ? 'Stage terminé' : `Fin dans ${joursRestants} jour(s)`}`
-                : `Non éligible - ${joursRestants} jour(s) restant(s)`,
-            joursRestants,
-            dateFinStage: user.dateFinStage
-        });
-
-    } catch (error) {
-        console.error("💥 ERREUR dans checkEligibility:", error);
-        res.status(500).json({ 
-            message: "Erreur serveur", 
-            error: error.message 
-        });
-    }
+  await attestation.save();
+  return attestation;
 };
 
-// Récupérer les attestations de l'utilisateur connecté
+// 📋 5️⃣ Récupérer mes attestations
 exports.getMesAttestations = async (req, res) => {
-    try {
-        console.log("📊 Récupération attestations pour user:", req.user.id);
-        
-        const attestations = await Attestation.find({ user: req.user.id })
-            .populate('user', 'nom prenom email role')
-            .sort({ createdAt: -1 });
-
-        console.log(`✅ ${attestations.length} attestation(s) trouvée(s)`);
-
-        res.status(200).json({
-            success: true,
-            attestations: attestations || []
-        });
-    } catch (error) {
-        console.error("❌ Erreur récupération attestations:", error);
-        res.status(500).json({ 
-            success: false,
-            message: "Erreur lors du chargement de vos attestations", 
-            error: error.message 
-        });
-    }
+  try {
+    const attestations = await Attestation.find({ user: req.user.id })
+      .populate('user', 'nom prenom role')
+      .sort({ createdAt: -1 });
+    res.status(200).json(attestations);
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la récupération des attestations", error });
+  }
 };
 
-// Générer attestation par un admin RH
+// 🧾 6️⃣ Générer (valider) une attestation par admin RH
 exports.generateAttestation = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const attestation = await Attestation.findByIdAndUpdate(
-            id,
-            { statut: 'Approuvé', dateDemande: new Date() },
-            { new: true }
-        ).populate('user', 'nom prenom email role service poste');
-        
-        if (!attestation) {
-            return res.status(404).json({ message: "Attestation non trouvée" });
-        }
-        
-        res.status(200).json({ message: "Attestation générée avec succès", attestation });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
-    }
+  try {
+    const { id } = req.params;
+    const attestation = await Attestation.findByIdAndUpdate(
+      id,
+      { statut: 'Approuvé', generePar: req.user.id },
+      { new: true }
+    ).populate('user', 'nom prenom email role service poste');
+    if (!attestation) return res.status(404).json({ message: "Attestation non trouvée" });
+    res.status(200).json({ message: "Attestation approuvée", attestation });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur serveur", error });
+  }
 };
 
-// Télécharger attestation 
+// 🧾 7️⃣ Télécharger une attestation (admin ou propriétaire)
 exports.downloadAttestation = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const attestation = await Attestation.findById(id).populate('user', 'nom prenom email role service poste');
-        if (!attestation || attestation.statut !== 'Approuvé') {
-            return res.status(404).json({ message: "Attestation non trouvée ou non approuvée" });
-        }
-        
-        // Générer le contenu de l'attestation
-        const attestationContent = `
+  try {
+    const { id } = req.params;
+    const attestation = await Attestation.findById(id).populate('user', 'nom prenom role service');
+    if (!attestation) return res.status(404).json({ message: "Attestation introuvable" });
+
+    const contenu = `
 ATTESTATION ${attestation.typeAttestation.toUpperCase()}
 
-Je soussigné(e), responsable des ressources humaines, atteste que :
+Je soussigné(e), responsable RH, atteste que :
 
 Nom : ${attestation.user.nom}
 Prénom : ${attestation.user.prenom}
 Rôle : ${attestation.user.role}
-${attestation.user.service ? `Service : ${attestation.user.service.nomService}` : ''}
-${attestation.user.poste ? `Poste : ${attestation.user.poste}` : ''}
+Service : ${attestation.user.service?.nomService || '-'}
 
-${attestation.contenu || `Cette attestation est délivrée pour faire valoir ce que de droit.`}
+${attestation.contenu}
 
 Fait à Toamasina, le ${new Date().toLocaleDateString('fr-FR')}
-
-Signature
 _________________________
 Responsable RH
-        `;
-        
-        res.setHeader('Content-Type', 'text/plain');
-        res.setHeader('Content-Disposition', `attachment; filename=attestation_${attestation.typeAttestation}_${attestation.user.nom}_${attestation.user.prenom}.txt`);
-        res.send(attestationContent);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
-    }
+`;
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename=attestation_${attestation.typeAttestation}_${attestation.user.nom}.txt`);
+    res.send(contenu);
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors du téléchargement", error });
+  }
 };
 
-// Voir historique des demandes des salariés et stagiaires
+// 🧮 8️⃣ Historique (admin)
 exports.getHistorique = async (req, res) => {
-    try {
-        const historique = await Attestation.find()
-            .populate({
-                path: 'user',
-                select: 'nom prenom role service poste',
-                populate: {
-                    path: 'service',
-                    select: 'nomService'
-                }
-            });
-        res.status(200).json(historique);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
-    }
-};
-
-// Voir toutes les demandes d'attestation (ADMIN_RH)
-exports.getAllAttestations = async (req, res) => {
-    try {
-        const attestations = await Attestation.find()
-            .populate({
-                path: 'user',
-                select: 'nom prenom email role service poste',
-                populate: {
-                    path: 'service',
-                    select: 'nomService'
-                }
-            });
-        res.status(200).json(attestations);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur", error });
-    }
+  try {
+    const historique = await Attestation.find()
+      .populate('user', 'nom prenom role service poste')
+      .populate('generePar', 'nom prenom role');
+    res.status(200).json(historique);
+  } catch (error) {
+    res.status(500).json({ message: "Erreur serveur", error });
+  }
 };

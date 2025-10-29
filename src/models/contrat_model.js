@@ -1,4 +1,4 @@
-// models/contrat_model.js
+// models/contrat_model.js - AVEC CHAMPS DE RENOUVELLEMENT
 const mongoose = require("mongoose");
 
 const contratSchema = new mongoose.Schema({
@@ -21,7 +21,7 @@ const contratSchema = new mongoose.Schema({
   },
   statut: { 
     type: String, 
-    enum: ["Actif", "Terminé", "Suspendu", "Résilié"],
+    enum: ["Actif", "Terminé", "Suspendu", "Résilié", "À renouveler"],
     default: "Actif", 
   },
   salaire: { 
@@ -43,10 +43,30 @@ const contratSchema = new mongoose.Schema({
     },
     trim: true,
   },
+  // NOUVEAUX CHAMPS POUR LE RENOUVELLEMENT
+  estRenouvelement: {
+    type: Boolean,
+    default: false
+  },
+  contratOriginal: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Contrat"
+  },
+  raisonRenouvellement: {
+    type: String,
+    trim: true
+  },
+  historiqueRenouvellements: [{
+    dateRenouvellement: Date,
+    ancienContratId: mongoose.Schema.Types.ObjectId,
+    nouveauContratId: mongoose.Schema.Types.ObjectId,
+    raison: String
+  }]
 }, { timestamps: true });
 
 contratSchema.index({ user: 1, dateDebut: -1 });
 contratSchema.index({ service: 1 });
 contratSchema.index({ statut: 1 });
+contratSchema.index({ estRenouvelement: 1 });
 
 module.exports = mongoose.model("Contrat", contratSchema);
